@@ -1,0 +1,906 @@
+package com.rk.terminal.ui.screens.terminal
+
+import android.app.Activity
+import android.content.res.Configuration
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.Typeface
+import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
+import androidx.core.view.WindowCompat
+import androidx.core.widget.doOnTextChanged
+import androidx.navigation.NavController
+import androidx.compose.ui.res.stringResource
+import com.rk.components.compose.preferences.base.PreferenceGroup
+import com.rk.libcommons.application
+import com.rk.resources.strings
+import com.rk.libcommons.child
+import com.rk.libcommons.dpToPx
+import com.rk.libcommons.localDir
+import com.rk.libcommons.pendingCommand
+import com.rk.settings.Settings
+import com.rk.terminal.ui.activities.terminal.MainActivity
+import com.rk.terminal.ui.routes.MainActivityRoutes
+import com.rk.terminal.ui.screens.settings.SettingsCard
+import com.rk.terminal.ui.screens.settings.WorkingMode
+import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysConstants
+import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysInfo
+import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysListener
+import com.rk.terminal.ui.screens.terminal.virtualkeys.VirtualKeysView
+import com.termux.terminal.TerminalColors
+import com.termux.view.TerminalView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.FileInputStream
+import java.lang.ref.WeakReference
+import java.util.Properties
+
+var terminalView = WeakReference<TerminalView?>(null)
+var virtualKeysView = WeakReference<VirtualKeysView?>(null)
+
+
+var darkText = mutableStateOf(Settings.blackTextColor)
+var bitmap = mutableStateOf<ImageBitmap?>(null)
+
+private val file = application!!.filesDir.child("font.ttf")
+private var font = (if (file.exists() && file.canRead()){
+    Typeface.createFromFile(file)
+}else{
+    Typeface.MONOSPACE
+})
+
+suspend fun setFont(typeface: Typeface) = withContext(Dispatchers.Main){
+    font = typeface
+    terminalView.get()?.apply {
+        setTypeface(typeface)
+        onScreenUpdated()
+    }
+}
+
+inline fun getViewColor(): Int{
+    return if (darkText.value){
+        Color.BLACK
+    }else{
+        Color.WHITE
+    }
+}
+
+inline fun getComposeColor():androidx.compose.ui.graphics.Color{
+    return if (darkText.value){
+        androidx.compose.ui.graphics.Color.Black
+    }else{
+        androidx.compose.ui.graphics.Color.White
+    }
+}
+
+var showToolbar = mutableStateOf(Settings.toolbar)
+var showVirtualKeys = mutableStateOf(Settings.virtualKeys)
+var showHorizontalToolbar = mutableStateOf(Settings.toolbar_in_horizontal)
+
+fun getTerminalBackgroundColor(themeName: String, isDark: Boolean): androidx.compose.ui.graphics.Color {
+    return when (themeName) {
+        "Dracula" -> androidx.compose.ui.graphics.Color(0xFF282A36)
+        "Nord" -> androidx.compose.ui.graphics.Color(0xFF2E3440)
+        "Solarized Dark" -> androidx.compose.ui.graphics.Color(0xFF002B36)
+        "Solarized Light" -> androidx.compose.ui.graphics.Color(0xFFFDF6E3)
+        "Gruvbox Dark" -> androidx.compose.ui.graphics.Color(0xFF282828)
+        "Gruvbox Light" -> androidx.compose.ui.graphics.Color(0xFFFBF1C7)
+        "One Dark" -> androidx.compose.ui.graphics.Color(0xFF282C34)
+        "Tokyo Night" -> androidx.compose.ui.graphics.Color(0xFF1A1B26)
+        "Tokyo Night Light" -> androidx.compose.ui.graphics.Color(0xFFD5D6DB)
+        "Catppuccin Mocha" -> androidx.compose.ui.graphics.Color(0xFF1E1E2E)
+        "Catppuccin Latte" -> androidx.compose.ui.graphics.Color(0xFFEFF1F5)
+        "Monokai" -> androidx.compose.ui.graphics.Color(0xFF272822)
+        "Material Dark" -> androidx.compose.ui.graphics.Color(0xFF212121)
+        "Ayu Dark" -> androidx.compose.ui.graphics.Color(0xFF0A0E14)
+        "Ayu Light" -> androidx.compose.ui.graphics.Color(0xFFFAFAFA)
+        "Matrix" -> androidx.compose.ui.graphics.Color(0xFF0D1117)
+        "Cyberpunk" -> androidx.compose.ui.graphics.Color(0xFF120458)
+        "OLED Black" -> androidx.compose.ui.graphics.Color(0xFF000000)
+        else -> if (isDark) androidx.compose.ui.graphics.Color(0xFF121212) else androidx.compose.ui.graphics.Color(0xFFF5F5F5)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TerminalScreen(
+    modifier: Modifier = Modifier,
+    mainActivityActivity: MainActivity,
+    navController: NavController
+) {
+    val context = LocalContext.current
+    val isDarkMode = isSystemInDarkTheme()
+    val scope = rememberCoroutineScope()
+
+
+    LaunchedEffect(Unit){
+        withContext(Dispatchers.IO){
+            val savedColorsFile = localDir().child("colors.properties")
+            if (savedColorsFile.exists() && savedColorsFile.canRead()) {
+                runCatching {
+                    FileInputStream(savedColorsFile).use { input ->
+                        val props = Properties()
+                        props.load(input)
+                        TerminalColors.COLOR_SCHEME.updateWith(props)
+                    }
+                }
+            }
+            if (context.filesDir.child("background").exists().not()){
+                darkText.value = if (Settings.terminal_theme == "Default") !isDarkMode else Settings.blackTextColor
+            }else if (bitmap.value == null){
+                val fullBitmap = BitmapFactory.decodeFile(context.filesDir.child("background").absolutePath)?.asImageBitmap()
+                if (fullBitmap != null) bitmap.value = fullBitmap
+            }
+        }
+
+
+        scope.launch(Dispatchers.Main){
+            virtualKeysView.get()?.apply {
+                virtualKeysViewClient =
+                    terminalView.get()?.mTermSession?.let {
+                        VirtualKeysListener(
+                            it
+                        )
+                    }
+
+                buttonTextColor = getViewColor()
+
+
+                reload(
+                    VirtualKeysInfo(
+                        VIRTUAL_KEYS,
+                        "",
+                        VirtualKeysConstants.CONTROL_CHARS_ALIASES
+                    )
+                )
+            }
+
+            terminalView.get()?.apply {
+                onScreenUpdated()
+
+                if (Settings.terminal_theme == "Default") {
+                    mEmulator?.mColors?.mCurrentColors?.apply {
+                        set(256, getViewColor())
+                        set(258, getViewColor())
+                    }
+                } else {
+                    mEmulator?.mColors?.reset()
+                }
+            }
+        }
+
+
+    }
+
+    Box {
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val scope = rememberCoroutineScope()
+        val configuration = LocalConfiguration.current
+        val screenWidthDp = configuration.screenWidthDp
+        val drawerWidth = (screenWidthDp * 0.84).dp
+        var showAddDialog by remember { mutableStateOf(false) }
+        var showDevTools by remember { mutableStateOf(false) }
+
+        BackHandler(enabled = true) {
+            if (drawerState.isOpen) {
+                scope.launch {
+                    drawerState.close()
+                }
+            } else {
+                navController.navigate(MainActivityRoutes.OpenCode.route)
+            }
+        }
+
+        if (drawerState.isClosed){
+            SetStatusBarTextColor(isDarkIcons = darkText.value)
+        }else{
+            SetStatusBarTextColor(isDarkIcons = !isDarkMode)
+        }
+
+        if (showAddDialog){
+            BasicAlertDialog(
+                onDismissRequest = {
+                    showAddDialog = false
+                }
+            ) {
+
+                fun createSession(workingMode:Int){
+                    fun generateUniqueString(existingStrings: List<String>): String {
+                        var index = 1
+                        var newString: String
+
+                        do {
+                            newString = "main$index"
+                            index++
+                        } while (newString in existingStrings)
+
+                        return newString
+                    }
+
+                    val binder = mainActivityActivity.sessionBinder
+                    if (binder != null) {
+                        val sessionId = generateUniqueString(binder.getService().sessionList.keys.toList())
+
+                        terminalView.get()
+                            ?.let {
+                                val client = TerminalBackEnd(it, mainActivityActivity)
+                                binder.createSession(
+                                    sessionId,
+                                    client,
+                                    mainActivityActivity, workingMode = workingMode
+                                )
+                            }
+
+
+                        changeSession(mainActivityActivity, session_id = sessionId)
+                    }
+                    showAddDialog = false
+                }
+
+
+                PreferenceGroup {
+                    SettingsCard(
+                        title = { Text("Alpine") },
+                        description = {Text(stringResource(strings.alpine_desc))},
+                        onClick = {
+                           createSession(workingMode = WorkingMode.ALPINE)
+                            showAddDialog = false
+                        })
+
+                    SettingsCard(
+                        title = { Text("Android") },
+                        description = {Text(stringResource(strings.android_desc))},
+                        onClick = {
+                            createSession(workingMode = WorkingMode.ANDROID)
+                            showAddDialog = false
+                        })
+                }
+            }
+        }
+
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = drawerState.isOpen || !(showToolbar.value && (LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE || showHorizontalToolbar.value)),
+            drawerContent = {
+                ModalDrawerSheet(modifier = Modifier.width(drawerWidth)) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(strings.session),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+
+                            Row {
+                                val keyboardController = LocalSoftwareKeyboardController.current
+                                IconButton(onClick = {
+                                    navController.navigate(MainActivityRoutes.Customization.route)
+                                    keyboardController?.hide()
+                                }) {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_palette),
+                                        contentDescription = "Appearance",
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    navController.navigate(MainActivityRoutes.Settings.route)
+                                    keyboardController?.hide()
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Settings,
+                                        contentDescription = null
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    navController.navigate(MainActivityRoutes.OpenCode.route)
+                                    scope.launch { drawerState.close() }
+                                }) {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_chat),
+                                        contentDescription = "OpenCode Chat",
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    showDevTools = true
+                                    scope.launch { drawerState.close() }
+                                }) {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_dev_tools),
+                                        contentDescription = stringResource(strings.dev_tools_title),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    showAddDialog = true
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null
+                                    )
+                                }
+
+                            }
+
+
+                        }
+
+                        mainActivityActivity.sessionBinder?.getService()?.sessionList?.keys?.toList()?.let {
+                            LazyColumn {
+                                items(it) { session_id ->
+                                    SelectableCard(
+                                        selected = session_id == mainActivityActivity.sessionBinder?.getService()?.currentSession?.value?.first,
+                                        onSelect = {
+                                            changeSession(
+                                                mainActivityActivity,
+                                                session_id
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = session_id,
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+
+                                            if (session_id != mainActivityActivity.sessionBinder?.getService()?.currentSession?.value?.first) {
+                                                Spacer(modifier = Modifier.weight(1f))
+
+                                                IconButton(
+                                                    onClick = {
+                                                        mainActivityActivity.sessionBinder?.terminateSession(
+                                                            session_id
+                                                        )
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Delete,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
+
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+                }
+
+            },
+            content = {
+                val terminalBg = getTerminalBackgroundColor(Settings.terminal_theme, isDarkMode)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BackgroundImage()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(terminalBg.copy(alpha = Settings.terminal_background_opacity))
+                    )
+                    val color = getComposeColor()
+                    Column {
+
+                        fun getNameOfWorkingMode(workingMode:Int?):String{
+                            return when(workingMode){
+                                0 -> "ALPINE".lowercase()
+                                1 -> "ANDROID".lowercase()
+                                null -> "null"
+                                else -> "unknown"
+                            }
+                        }
+
+
+                        if (showToolbar.value && (LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE || showHorizontalToolbar.value)){
+                            TopAppBar(
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                    scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent
+                                ),
+                                title = {
+                                    Column {
+                                        Text(text = "AndLinux", color = color)
+                                        // Null-safe session title. sessionBinder is normally bound
+                                        // by the time TerminalScreen is composed, but defensive
+                                        // null-handling avoids an NPE in the title bar if the
+                                        // service disconnects mid-render.
+                                        val sessionInfo = mainActivityActivity.sessionBinder
+                                            ?.getService()?.currentSession?.value
+                                        val sessionId = sessionInfo?.first ?: "—"
+                                        val sessionMode = getNameOfWorkingMode(sessionInfo?.second)
+                                        Text(
+                                            style = MaterialTheme.typography.bodySmall,
+                                            text = "$sessionId ($sessionMode)",
+                                            color = color,
+                                        )
+                                    }
+                                },
+                                navigationIcon = {
+                                    IconButton(onClick = {
+                                        scope.launch { drawerState.open() }
+                                    }) {
+                                        Icon(Icons.Default.Menu, null, tint = color)
+                                    }
+                                },
+                                actions = {
+                                    IconButton(onClick = {
+                                        navController.navigate(MainActivityRoutes.OpenCode.route)
+                                    }) {
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_chat),
+                                            contentDescription = "OpenCode Chat",
+                                            tint = color,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        showDevTools = true
+                                    }) {
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_dev_tools),
+                                            contentDescription = stringResource(strings.dev_tools_title),
+                                            tint = color,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        navController.navigate(MainActivityRoutes.Customization.route)
+                                    }) {
+                                        Icon(
+                                            painter = androidx.compose.ui.res.painterResource(id = com.rk.resources.drawables.ic_palette),
+                                            contentDescription = "Appearance",
+                                            tint = color,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        showAddDialog = true
+                                    }) {
+                                        Icon(Icons.Default.Add,null, tint = color)
+                                    }
+                                }
+                            )
+                        }
+
+                        val density = LocalDensity.current
+                        Column(modifier = Modifier.imePadding().navigationBarsPadding().padding(top = if (showToolbar.value){0.dp}else{
+                            with(density){
+                                TopAppBarDefaults.windowInsets.getTop(density).toDp()
+                            }
+                        })) {
+                            AndroidView(
+                                factory = { context ->
+                                    TerminalView(context, null).apply {
+                                        terminalView = WeakReference(this)
+                                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                        setTextSize(
+                                            dpToPx(
+                                                Settings.terminal_font_size.toFloat(),
+                                                context
+                                            )
+                                        )
+                                        val client = TerminalBackEnd(this, mainActivityActivity)
+
+                                        // Bail out cleanly if the service is not bound yet
+                                        // (e.g. user dismissed the activity very quickly).
+                                        val binder = mainActivityActivity.sessionBinder
+                                        if (binder == null) {
+                                            return@apply
+                                        }
+                                        val service = binder.getService()
+
+                                        val session = if (pendingCommand != null) {
+                                            val cmd = pendingCommand!!
+                                            service.currentSession.value = Pair(cmd.id, cmd.workingMode)
+                                            binder.getSession(cmd.id)
+                                                ?: binder.createSession(
+                                                    cmd.id,
+                                                    client,
+                                                    mainActivityActivity,
+                                                    workingMode = Settings.working_Mode,
+                                                )
+                                        } else {
+                                            val currentId = service.currentSession.value.first
+                                            val terminalId = if (currentId == "opencode") "main" else currentId
+                                            service.currentSession.value = Pair(terminalId, Settings.working_Mode)
+                                            binder.getSession(terminalId)
+                                                ?: binder.createSession(
+                                                    terminalId,
+                                                    client,
+                                                    mainActivityActivity,
+                                                    workingMode = Settings.working_Mode,
+                                                )
+                                        }
+
+                                        session.updateTerminalSessionClient(client)
+                                        attachSession(session)
+                                        setTerminalViewClient(client)
+                                        setTypeface(font)
+
+                                        post {
+                                            val color = getViewColor()
+
+                                            keepScreenOn = true
+                                            requestFocus()
+                                            isFocusableInTouchMode = true
+
+                                            if (Settings.terminal_theme == "Default") {
+                                                mEmulator?.mColors?.mCurrentColors?.apply {
+                                                    set(256, color)
+                                                    set(258, color)
+                                                }
+                                            } else {
+                                                mEmulator?.mColors?.reset()
+                                            }
+
+                                            val colorsFile = localDir().child("colors.properties")
+                                            if (colorsFile.exists() && colorsFile.isFile){
+                                                val props = Properties()
+                                                FileInputStream(colorsFile).use { input ->
+                                                    props.load(input)
+                                                }
+                                                TerminalColors.COLOR_SCHEME.updateWith(props)
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                update = { terminalView ->
+                                    terminalView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                    terminalView.setTextSize(
+                                        dpToPx(
+                                            Settings.terminal_font_size.toFloat(),
+                                            context
+                                        )
+                                    )
+                                    terminalView.onScreenUpdated()
+                                    val color = getViewColor()
+
+                                    if (Settings.terminal_theme == "Default") {
+                                        terminalView.mEmulator?.mColors?.mCurrentColors?.apply {
+                                            set(256, color)
+                                            set(258, color)
+                                        }
+                                    } else {
+                                        terminalView.mEmulator?.mColors?.reset()
+                                    }
+                                },
+                            )
+
+                                if (showVirtualKeys.value){
+                                    val pagerState = rememberPagerState(pageCount = { 2 })
+                                    val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                                    HorizontalPager(
+                                        state = pagerState,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(75.dp)
+                                    ) { page ->
+                                        when (page) {
+                                            0 -> {
+                                                terminalView.get()?.requestFocus()
+                                                //terminalView.get()?.requestFocusFromTouch()
+                                                AndroidView(
+                                                    factory = { context ->
+                                                        VirtualKeysView(context, null).apply {
+                                                            virtualKeysView = WeakReference(this)
+                                                            virtualKeysViewClient =
+                                                                terminalView.get()?.mTermSession?.let {
+                                                                    VirtualKeysListener(
+                                                                        it
+                                                                    )
+                                                                }
+
+                                                            buttonTextColor = onSurfaceColor!!
+
+                                                            reload(
+                                                                VirtualKeysInfo(
+                                                                    VIRTUAL_KEYS,
+                                                                    "",
+                                                                    VirtualKeysConstants.CONTROL_CHARS_ALIASES
+                                                                )
+                                                            )
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(75.dp)
+                                                )
+                                            }
+
+                                            1 -> {
+                                                var text by rememberSaveable { mutableStateOf("") }
+
+                                                AndroidView(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(75.dp),
+                                                    factory = { ctx ->
+                                                        EditText(ctx).apply {
+                                                            maxLines = 1
+                                                            isSingleLine = true
+                                                            imeOptions = EditorInfo.IME_ACTION_DONE
+
+                                                            // Listen for text changes to update Compose state
+                                                            doOnTextChanged { textInput, _, _, _ ->
+                                                                text = textInput.toString()
+                                                            }
+
+                                                            setOnEditorActionListener { v, actionId, event ->
+                                                                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                                                                    if (text.isEmpty()) {
+                                                                        // Dispatch enter key events if text is empty
+                                                                        val eventDown = KeyEvent(
+                                                                            KeyEvent.ACTION_DOWN,
+                                                                            KeyEvent.KEYCODE_ENTER
+                                                                        )
+                                                                        val eventUp = KeyEvent(
+                                                                            KeyEvent.ACTION_UP,
+                                                                            KeyEvent.KEYCODE_ENTER
+                                                                        )
+                                                                        terminalView.get()
+                                                                            ?.dispatchKeyEvent(eventDown)
+                                                                        terminalView.get()
+                                                                            ?.dispatchKeyEvent(eventUp)
+                                                                    } else {
+                                                                        terminalView.get()?.currentSession?.write(
+                                                                            text
+                                                                        )
+                                                                        setText("")
+                                                                    }
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    update = { editText ->
+                                                        // Keep EditText's text in sync with Compose state, avoid infinite loop by only updating if different
+                                                        if (editText.text.toString() != text) {
+                                                            editText.setText(text)
+                                                            editText.setSelection(text.length)
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                    }
+                                }else{
+                                    virtualKeysView = WeakReference(null)
+                                }
+
+                            }
+                        }
+
+
+
+                }
+
+            })
+
+        if (showDevTools) {
+            com.rk.terminal.ui.components.DevToolsSheet(
+                mainActivity = mainActivityActivity,
+                onDismissRequest = { showDevTools = false },
+                onSwitchPort = { port ->
+                    navController.navigate(MainActivityRoutes.OpenCode.route)
+                }
+            )
+        }
+    }
+}
+
+var wallAlpha by mutableFloatStateOf(Settings.wallTransparency)
+
+@Composable
+fun BackgroundImage() {
+    bitmap.value?.let {
+        Image(
+            bitmap = it,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(wallAlpha)
+                .zIndex(-1f)
+        )
+    }
+}
+
+@Composable
+fun SetStatusBarTextColor(isDarkIcons: Boolean) {
+    val view = LocalView.current
+    val window = (view.context as? Activity)?.window ?: return
+
+    SideEffect {
+        WindowCompat.getInsetsController(window, view)?.isAppearanceLightStatusBars = isDarkIcons
+    }
+}
+
+
+
+@Composable
+fun SelectableCard(
+    selected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.surface
+        },
+        label = "containerColor"
+    )
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (selected) 8.dp else 2.dp
+        ),
+        enabled = enabled,
+        onClick = onSelect
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+
+fun changeSession(mainActivityActivity: MainActivity, session_id: String) {
+    val binder = mainActivityActivity.sessionBinder ?: return
+    val service = binder.getService()
+    terminalView.get()?.apply {
+        val client = TerminalBackEnd(this, mainActivityActivity)
+        val session = binder.getSession(session_id)
+            ?: binder.createSession(
+                session_id,
+                client,
+                mainActivityActivity,
+                workingMode = Settings.working_Mode,
+            )
+        session.updateTerminalSessionClient(client)
+        attachSession(session)
+        setTerminalViewClient(client)
+        post {
+            keepScreenOn = true
+            requestFocus()
+            isFocusableInTouchMode = true
+
+            // Respect the active terminal theme — only force foreground/cursor
+            // colors for the Default theme; for named themes let the theme's
+            // own colors take over via mColors.reset().
+            if (Settings.terminal_theme == "Default") {
+                mEmulator?.mColors?.mCurrentColors?.apply {
+                    set(256, getViewColor())
+                    set(258, getViewColor())
+                }
+            } else {
+                mEmulator?.mColors?.reset()
+            }
+        }
+        virtualKeysView.get()?.apply {
+            virtualKeysViewClient =
+                terminalView.get()?.mTermSession?.let { VirtualKeysListener(it) }
+        }
+    }
+    service.currentSession.value = Pair(session_id, service.sessionList[session_id]!!)
+}
+
+
+const val VIRTUAL_KEYS =
+    ("[" + "\n  [" + "\n    \"ESC\"," + "\n    {" + "\n      \"key\": \"/\"," + "\n      \"popup\": \"\\\\\"" + "\n    }," + "\n    {" + "\n      \"key\": \"-\"," + "\n      \"popup\": \"|\"" + "\n    }," + "\n    \"HOME\"," + "\n    \"UP\"," + "\n    \"END\"," + "\n    \"PGUP\"" + "\n  ]," + "\n  [" + "\n    \"TAB\"," + "\n    \"CTRL\"," + "\n    \"ALT\"," + "\n    \"LEFT\"," + "\n    \"DOWN\"," + "\n    \"RIGHT\"," + "\n    \"PGDN\"" + "\n  ]" + "\n]")

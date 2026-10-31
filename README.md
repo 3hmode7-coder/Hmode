@@ -1,11 +1,404 @@
-<div align="center">
+# AndLinux
+[Русский](#русский) | [English](#english)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+---
+## Русский
+**AndLinux** — мобильная Linux-терминальная среда для Android без root-доступа
 
-  <h1>Built with AI Studio</h2>
+Проект делает упор на стабильный запуск Alpine Linux, удобную работу, выбор shell и полноценные цветовые темы для терминала и интерфейса приложения. AndLinux работает как обычное приложение: ставится из APK, не требует разблокировки загрузчика, не модифицирует систему и не требует root
+```text
+Версия: 1.6 (stable)
+Разработчик: SiriLV
+Лицензия: MIT
+Package ID: com.term.andlinux
+Root-доступ: не требуется
+Основная среда: Alpine Linux
+SDK: min 26 (Android 8.0), target 28 (Fdroid) / 35 (PlayStore)
+```
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+### Ключевые возможности
+- **Alpine Linux внутри Android через proot.** Полноценный userspace-дистрибутив Alpine, запускаемый без root через `proot` с предзагруженным `libtalloc.so.2`
+- **Отдельный режим Android shell.** При необходимости можно работать в чистом Android shell, не входя в Alpine
+- **Несколько терминальных сессий.** Сессии переключаются через боковое меню, каждая имеет свой рабочий режим
+- **Виртуальные терминальные клавиши.** `ESC`, `CTRL`, `ALT`, стрелки, `HOME`, `END`, `PGUP`, `PGDN`, `TAB`
+- **Выбор shell для Alpine:**
+  - `ash` — BusyBox ash, минимальный и быстрый shell по умолчанию
+  - `bash` — GNU Bash, лучшая совместимость со скриптами
+  - `fish` — современный интерактивный shell с автодополнением
+  - `zsh` — мощный настраиваемый shell
+- **Login-shell запуск** для выбранного shell
+- **Автоматическая установка выбранного shell**
+- **Настраиваемый размер текста терминала** (10–20sp)
+- **Настраиваемый scrollback** терминала
+- **Пользовательский шрифт** (любой `.ttf`, рекомендуется моноширинный)
+- **Пользовательский фон** терминала с автоматическим выбором контраста текста
+- **Прозрачность фона** от 0 до 1
+- **Переключатели status bar, title bar и virtual keys**
+- **Настраиваемые keyboard shortcuts** для paste, new/close/switch session
+- **Темы**, которые меняют и терминал, и интерфейс приложения (Material 3)
+- **Динамический выбор последнего стабильного релиза Alpine**
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### Темы
+AndLinux 1.6 поддерживает набор встроенных цветовых схем:
+```text
+Default
+Dracula
+Nord
+Solarized Dark
+Solarized Light
+Gruvbox Dark
+Gruvbox Light
+One Dark
+Tokyo Night
+Tokyo Night Light
+Catppuccin Mocha
+Catppuccin Latte
+Monokai
+Material Dark
+Ayu Dark
+Ayu Light
+```
 
-</div>
+Темы применяются к терминалу и основному UI: экрану сессий, настройкам, карточкам, панелям, акцентным цветам и системным bar-флагам. Выбор темы сохраняется в `colors.properties` и применяется при следующем запуске
+
+### Первый запуск: user и hostname
+При первом запуске Alpine приложение предлагает задать видимое имя пользователя и hostname:
+```text
+AndLinux first setup
+
+User name [user]: siri
+Host name [andlinux]: okak
+
+Saved identity: siri@okak
+```
+
+После этого prompt будет выглядеть примерно так:
+```text
+siri@okak:~#
+```
+
+Повторно изменить имя можно командой:
+```sh
+andlinux-identity
+```
+
+Эта команда меняет prompt, `/etc/hostname`, `/etc/hosts` и переменные окружения (`USER`, `LOGNAME`, `HOSTNAME`, `ANDLINUX_USER`, `ANDLINUX_HOST`) внутри Alpine. Среда по-прежнему работает через proot — root-доступ не требуется
+
+### Загрузка Alpine Linux
+При первом запуске AndLinux скачивает три файла:
+1. `libtalloc.so.2` — библиотека, требуемая `proot`
+2. `proot` — бинарник proot для соответствующей архитектуры
+3. `alpine.tar.gz` — minirootfs последнего стабильного релиза Alpine Linux
+
+Для Alpine minirootfs URL резолвится **динамически** во время запуска:
+```text
+https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/<arch>/
+```
+
+Приложение получает листинг директории, ищет файл вида
+`alpine-minirootfs-<version>-<arch>.tar.gz`, выбирает файл с наибольшим
+номером версии и скачивает его. Благодаря этому AndLinux всегда
+устанавливает актуальный стабильный релиз Alpine, не требуя обновления
+самого APK при выходе новой минорной версии Alpine
+
+Поддерживаемые архитектуры:
+| Android ABI     | Alpine arch |
+|-----------------|-------------|
+| `arm64-v8a`     | `aarch64`   |
+| `armeabi-v7a`   | `armhf`     |
+| `x86_64`        | `x86_64`    |
+
+### Shell
+Открой:
+```text
+Settings -> Default Shell
+```
+
+Выбери `ash`, `bash`, `fish` или `zsh`, затем открой новую сессию
+
+Проверка:
+```sh
+echo "$SHELL"
+echo "$0"
+```
+
+### Сборка APK
+Основной workflow:
+```text
+.github/workflows/android.yml
+```
+
+Команда сборки:
+```sh
+./gradlew --no-daemon assembleFdroidRelease -x lintVitalFdroidRelease
+```
+
+Artifact в GitHub Actions:
+```text
+Andlinux-apk/Andlinux.apk
+```
+
+Локальный путь после сборки:
+```text
+app/build/outputs/apk/Fdroid/release/*.apk
+```
+
+Для локальной сборки также есть `release-build.sh`:
+```sh
+./release-build.sh
+```
+
+Скрипт сам сгенерирует `local.properties` из `ANDROID_HOME` (если переменная окружения задана), запустит `clean` и соберёт Fdroid-release APK
+### Архитектура проекта
+```text
+.
+├── app/                      # application-модуль (entry point)
+│   └── build.gradle.kts
+├── core/
+│   ├── main/                 # основной код AndLinux
+│   │   ├── src/main/
+│   │   │   ├── assets/
+│   │   │   │   ├── init.sh         # init-скрипт Alpine (вызывается proot-ом)
+│   │   │   │   └── init-host.sh    # host-сторона: monтировка bind-ов, запуск proot
+│   │   │   ├── java/com/rk/
+│   │   │   │   ├── terminal/       # UI: terminal screen, settings, customization, downloader
+│   │   │   │   ├── libcommons/     # общие утилиты (FileUtil, Utils, …)
+│   │   │   │   ├── settings/       # SharedPreferences wrapper
+│   │   │   │   ├── update/         # UpdateManager — обновляет init-скрипты при апгрейде
+│   │   │   │   ├── crashhandler/   # global crash handler
+│   │   │   │   └── karbon_exec/    # интеграция с Termux RUN_COMMAND
+│   │   │   └── res/                # темы, strings, layout'ы
+│   │   └── build.gradle.kts
+│   ├── components/           # переиспользуемые Compose-компоненты (preferences)
+│   ├── resources/            # strings.xml и иконки (мультиязычность: en, zh, ar)
+│   ├── terminal-emulator/    # форк Termux terminal-emulator
+│   └── terminal-view/        # форк Termux terminal-view
+├── fastlane/                 # metadata для F-Droid / Play Store
+├── .github/
+│   └── workflows/            # CI: build APK, delete old runs, verifyDiff
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle/libs.versions.toml
+├── gradle.properties
+└── README.md
+```
+
+### Структура каталогов на устройстве
+После установки AndLinux использует следующие каталоги внутри своего приватного хранилища:
+```text
+/data/data/com.term.andlinux/
+├── files/                 # Rootfs.andLinux — сюда скачиваются proot, libtalloc, alpine.tar.gz
+├── local/
+│   ├── bin/               # init, init-host, proot (копия)
+│   ├── lib/               # libtalloc.so.2 (копия)
+│   └── alpine/            # распакованный Alpine rootfs
+│       └── root/          # $HOME внутри Alpine (=AlpineDocumentProvider root)
+└── tmp/                   # PROOT_TMP_DIR, чистится при старте
+```
+
+Файлы внутри `/data/data/com.term.andlinux/files/` — кеш первой установки. Если их удалить, при следующем запуске AndLinux перекачает их заново
+
+### Лицензия
+MIT. См. [`LICENSE`](LICENSE)
+
+---
+
+## English
+**AndLinux** is a mobile Linux terminal environment for Android without root access
+
+The project focuses on stable Alpine Linux startup through proot, shell selection, and full color themes for both the terminal and the app UI. AndLinux runs as a regular APK: no bootloader unlock, no system modification, no root
+```text
+Version: 1.6 (stable)
+Developer: SiriLV
+License: MIT
+Package ID: com.term.andlinux
+Root access: not required
+Main environment: Alpine Linux
+SDK: min 26 (Android 8.0), target 28 (Fdroid) / 35 (PlayStore)
+```
+
+### Key features
+- **Alpine Linux on Android through proot.** A full Alpine userspace running unrooted via `proot` with a pre-bundled `libtalloc.so.2`
+- **Separate Android shell mode.** Drop into a plain Android shell without entering Alpine when you need it
+- **Multiple terminal sessions.** Switch sessions from the side drawer; each session has its own working mode
+- **Virtual terminal keys.** `ESC`, `CTRL`, `ALT`, arrows, `HOME`, `END`, `PGUP`, `PGDN`, `TAB`
+- **Alpine shell selector:**
+  - `ash` — BusyBox ash, minimal and fastest default shell
+  - `bash` — GNU Bash, best compatibility for scripts
+  - `fish` — modern interactive shell with autosuggestions
+  - `zsh` — powerful configurable shell
+- **Login-shell startup** for the selected shell
+- **Configurable terminal text size** (10–20sp)
+- **Configurable scrollback.**
+- **Custom font** (any `.ttf`, monospaced strongly recommended)
+- **Custom background** with automatic text-contrast adjustment
+- **Background transparency** from 0 to 1
+- **Status bar, title bar, and virtual keys toggles.**
+- **Configurable keyboard shortcuts** for paste, new/close/switch session
+- **Themes** that drive both the terminal and the app UI (Material 3)
+- **Dynamic latest-stable Alpine release resolution**
+
+### Themes
+AndLinux 1.6 includes built-in color schemes:
+```text
+Default
+Dracula
+Nord
+Solarized Dark
+Solarized Light
+Gruvbox Dark
+Gruvbox Light
+One Dark
+Tokyo Night
+Tokyo Night Light
+Catppuccin Mocha
+Catppuccin Latte
+Monokai
+Material Dark
+Ayu Dark
+Ayu Light
+```
+
+Themes are applied to the terminal and the main UI: session drawer, settings, cards, panels, accent colors, and system bar flags. The selected theme is persisted in `colors.properties` and reapplied on next launch
+
+### First launch: user and hostname
+On the first Alpine launch, AndLinux asks for the visible user name and hostname:
+```text
+AndLinux first setup
+
+User name [user]: siri
+Host name [andlinux]: okak
+
+Saved identity: siri@okak
+```
+
+The prompt will then look like this:
+```text
+siri@okak:~#
+```
+
+You can change it later with:
+```sh
+andlinux-identity
+```
+
+This changes the prompt, `/etc/hostname`, `/etc/hosts`, and environment variables (`USER`, `LOGNAME`, `HOSTNAME`, `ANDLINUX_USER`, `ANDLINUX_HOST`) inside Alpine. The environment still runs through proot — no root required
+
+### Alpine Linux download
+On first launch AndLinux downloads three files:
+
+1. `libtalloc.so.2` — library required by `proot`
+2. `proot` — proot binary for the device's architecture
+3. `alpine.tar.gz` — the minirootfs of the latest stable Alpine release
+
+For the Alpine minirootfs the URL is resolved **dynamically** at runtime:
+```text
+https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/<arch>/
+```
+
+The app fetches the directory listing, looks for files matching
+`alpine-minirootfs-<version>-<arch>.tar.gz`, picks the one with the
+highest version number, and downloads it. This way AndLinux always
+installs the current stable Alpine release without requiring an APK
+update each time Alpine ships a new minor version
+
+Supported architectures:
+| Android ABI     | Alpine arch |
+|-----------------|-------------|
+| `arm64-v8a`     | `aarch64`   |
+| `armeabi-v7a`   | `armhf`     |
+| `x86_64`        | `x86_64`    |
+
+### Shell
+Open:
+```text
+Settings -> Default Shell
+```
+
+Choose `ash`, `bash`, `fish`, or `zsh`, then open a new session
+
+Check inside Alpine:
+```sh
+echo "$SHELL"
+echo "$0"
+```
+
+### Building the APK
+Main workflow:
+```text
+.github/workflows/android.yml
+```
+
+Build command:
+```sh
+./gradlew --no-daemon assembleFdroidRelease -x lintVitalFdroidRelease
+```
+
+GitHub Actions artifact:
+```text
+Andlinux-apk/Andlinux.apk
+```
+
+Local APK path:
+```text
+app/build/outputs/apk/Fdroid/release/*.apk
+```
+
+For local builds there is also `release-build.sh`:
+```sh
+./release-build.sh
+```
+
+It will auto-generate `local.properties` from `ANDROID_HOME` (if set), then run `clean` and build the Fdroid-release APK.
+
+### Project architecture
+```text
+.
+├── app/                      # application module (entry point)
+│   └── build.gradle.kts
+├── core/
+│   ├── main/                 # main AndLinux code
+│   │   ├── src/main/
+│   │   │   ├── assets/
+│   │   │   │   ├── init.sh         # Alpine init script (called by proot)
+│   │   │   │   └── init-host.sh    # host side: bind mounts, proot launch
+│   │   │   ├── java/com/rk/
+│   │   │   │   ├── terminal/       # UI: terminal screen, settings, customization, downloader
+│   │   │   │   ├── libcommons/     # common utilities (FileUtil, Utils, …)
+│   │   │   │   ├── settings/       # SharedPreferences wrapper
+│   │   │   │   ├── update/         # UpdateManager — refreshes init scripts on upgrade
+│   │   │   │   ├── crashhandler/   # global crash handler
+│   │   │   │   └── karbon_exec/    # Termux RUN_COMMAND integration
+│   │   │   └── res/                # themes, strings, layouts
+│   │   └── build.gradle.kts
+│   ├── components/           # reusable Compose components (preferences)
+│   ├── resources/            # strings.xml and icons (i18n: en, zh, ar)
+│   ├── terminal-emulator/    # Termux terminal-emulator fork
+│   └── terminal-view/        # Termux terminal-view fork
+├── fastlane/                 # F-Droid / Play Store metadata
+├── .github/
+│   └── workflows/            # CI: build APK, delete old runs, verifyDiff
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle/libs.versions.toml
+├── gradle.properties
+└── README.md
+```
+
+### On-device directory layout
+After install, AndLinux uses the following directories inside its private storage:
+```text
+/data/data/com.term.andlinux/
+├── files/                 # Rootfs.andLinux — proot, libtalloc, alpine.tar.gz land here
+├── local/
+│   ├── bin/               # init, init-host, proot (copy)
+│   ├── lib/               # libtalloc.so.2 (copy)
+│   └── alpine/            # extracted Alpine rootfs
+│       └── root/          # $HOME inside Alpine (=AlpineDocumentProvider root)
+└── tmp/                   # PROOT_TMP_DIR, cleaned on start
+```
+
+Files inside `/data/data/com.term.andlinux/files/` are a first-install cache. Deleting them forces AndLinux to re-download them on next launch.
+
+### License
+MIT. See [`LICENSE`](LICENSE)
